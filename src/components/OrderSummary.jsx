@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const OrderSummary = ({
     items = [],
@@ -78,30 +79,48 @@ const OrderSummary = ({
                                 <div key={item.id} className="grid grid-cols-[1fr_80px_80px] sm:grid-cols-[1fr_100px_80px_80px] gap-2 items-center min-h-[40px]">
                                     <div className="font-medium text-dark truncate pr-2" title={item.name}>{item.name}</div>
 
-                                    <div className="flex items-center justify-center">
+                                    <div className="flex flex-col items-center gap-1">
                                         {!isEditable ? (
                                             <div className="w-10 text-center text-gray-600 bg-gray-50 rounded-md py-0.5">{item.qty}</div>
                                         ) : (
-                                            <div className="flex items-center justify-between bg-gray-50 rounded-full border border-gray-200 p-0.5 w-[80px]">
-                                                <button
-                                                    onClick={() => handleMinusClick(item)}
-                                                    className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors focus:outline-none ${confirmDeleteId === item.id
+                                            <>
+                                                <div className="flex items-center justify-between bg-gray-50 rounded-full border border-gray-200 p-0.5 w-[80px]">
+                                                    <button
+                                                        onClick={() => handleMinusClick(item)}
+                                                        className={`w-6 h-6 flex items-center justify-center rounded-full transition-colors focus:outline-none ${confirmDeleteId === item.id
                                                             ? 'bg-red-100 text-red-600 hover:bg-red-200'
                                                             : 'bg-white text-dark border border-gray-200 hover:border-gray-300'
-                                                        }`}
-                                                >
-                                                    <span className="font-medium leading-none mb-0.5" style={{ fontSize: confirmDeleteId === item.id ? '0.7rem' : '1rem' }}>
-                                                        {confirmDeleteId === item.id ? '🗑️' : '-'}
-                                                    </span>
-                                                </button>
-                                                <span className="font-semibold text-dark text-xs w-4 text-center">{item.qty}</span>
-                                                <button
-                                                    onClick={() => handlePlusClick(item)}
-                                                    className="w-6 h-6 flex items-center justify-center rounded-full bg-primary text-white hover:bg-red-700 transition-colors focus:outline-none"
-                                                >
-                                                    <span className="font-medium leading-none mb-0.5">+</span>
-                                                </button>
-                                            </div>
+                                                            }`}
+                                                    >
+                                                        <span className="font-medium leading-none mb-0.5" style={{ fontSize: confirmDeleteId === item.id ? '0.7rem' : '1rem' }}>
+                                                            {confirmDeleteId === item.id ? '🗑️' : '-'}
+                                                        </span>
+                                                    </button>
+                                                    <span className="font-semibold text-dark text-xs w-4 text-center">{item.qty}</span>
+                                                    <button
+                                                        onClick={() => handlePlusClick(item)}
+                                                        className="w-6 h-6 flex items-center justify-center rounded-full bg-primary text-white hover:bg-red-700 transition-colors focus:outline-none"
+                                                    >
+                                                        <span className="font-medium leading-none mb-0.5">+</span>
+                                                    </button>
+                                                </div>
+
+                                                {/* Hint animado — aparece solo cuando el ícono 🗑️ está activo */}
+                                                <AnimatePresence>
+                                                    {confirmDeleteId === item.id && (
+                                                        <motion.span
+                                                            key="delete-hint"
+                                                            initial={{ opacity: 0, y: -4 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            exit={{ opacity: 0, y: -4 }}
+                                                            transition={{ duration: 0.2 }}
+                                                            className="text-[10px] text-red-500 font-medium text-center leading-tight whitespace-nowrap"
+                                                        >
+                                                            Toca de nuevo
+                                                        </motion.span>
+                                                    )}
+                                                </AnimatePresence>
+                                            </>
                                         )}
                                     </div>
 

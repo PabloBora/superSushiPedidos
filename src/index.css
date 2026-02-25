@@ -5,3 +5,21 @@
   --color-dark: #0A0A0A;
   --color-light: #FAFAFA;
 }
+
+/* Fondo con textura sutil — base neutra + patrón de puntos apenas visible.
+   Quita la línea background-image para volver al fondo plano en cualquier momento. */
+.order-bg {
+  background-color: #FAFAFA;
+  background-image:
+    repeating-linear-gradient(-55deg,
+      transparent,
+      transparent 38px,
+      rgba(0, 0, 0, 0.045) 38px,
+      rgba(0, 0, 0, 0.045) 39px),
+    repeating-linear-gradient(35deg,
+      transparent,
+      transparent 54px,
+      rgba(0, 0, 0, 0.03) 54px,
+      rgba(0, 0, 0, 0.03) 55px);
+  min-height: 100vh;
+}

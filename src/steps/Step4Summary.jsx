@@ -6,6 +6,7 @@ import OrderSummary from '../components/OrderSummary.jsx';
 import StepIndicator from '../components/StepIndicator.jsx';
 import PaymentForm from '../components/PaymentForm.jsx';
 import { createOrder } from '../services/api.js';
+import logoFull from '../assets/logos-03.png';
 
 // Usamos una PK de prueba pública (Test Mode) proporcionada por Stripe para simulaciones.
 // En producción, esto se leería de import.meta.env.VITE_STRIPE_PUBLIC_KEY
@@ -50,6 +51,7 @@ const Step4Summary = () => {
     if (isSuccess) {
         return (
             <div className="bg-white rounded-2xl shadow-sm p-8 max-w-lg mx-auto border border-gray-100 text-center">
+                <img src={logoFull} alt="Super Sushi" className="h-14 w-auto mx-auto mb-6" />
                 <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
                     <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                 </div>
@@ -82,6 +84,7 @@ const Step4Summary = () => {
             <StepIndicator currentStep={4} />
 
             <div className="text-center mb-8 mt-2">
+                <img src={logoFull} alt="Super Sushi" className="h-12 w-auto mx-auto mb-4" />
                 <h2 className="text-3xl font-bold text-dark mb-2">Confirma tu pedido</h2>
                 <p className="text-gray-500">Revisa los detalles antes de pagar</p>
             </div>

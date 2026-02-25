@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { OrderProvider, useOrder } from '../hooks/useOrder.jsx';
-import StepIndicator from '../components/StepIndicator.jsx';
 
 import Step1Contact from '../steps/Step1Contact.jsx';
 import Step2Pickup from '../steps/Step2Pickup.jsx';
@@ -43,7 +42,7 @@ const StepContent = () => {
 const Order = () => {
     return (
         <OrderProvider>
-            <div className="min-h-screen bg-light">
+            <div className="order-bg">
                 <StepContent />
             </div>
         </OrderProvider>

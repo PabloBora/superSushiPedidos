@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import logoFull from '../assets/logos-03.png';
 
 const Landing = () => {
     const navigate = useNavigate();
@@ -23,9 +24,11 @@ const Landing = () => {
                         <div className="inline-block px-4 py-1.5 rounded-full bg-white/10 text-sm font-medium tracking-wide mb-6 border border-white/20">
                             Pedidos en línea • Pick-up
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-                            Super Sushi
-                        </h1>
+                        <img
+                            src={logoFull}
+                            alt="Super Sushi"
+                            className="h-24 md:h-32 w-auto mb-6 brightness-0 invert"
+                        />
                         <h2 className="text-2xl md:text-3xl text-gray-300 font-medium mb-6">
                             Ordena en línea, recoge cuando quieras
                         </h2>

@@ -6,6 +6,7 @@ import { MENU } from '../config/menu.js';
 import MenuItem from '../components/MenuItem.jsx';
 import StepIndicator from '../components/StepIndicator.jsx';
 import OrderSummary from '../components/OrderSummary.jsx';
+import logoFull from '../assets/logos-03.png';
 
 const Step3Menu = () => {
     const { items, addItem, removeItem, updateQty, setStep, totals } = useOrder();
