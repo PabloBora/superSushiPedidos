@@ -108,8 +108,8 @@ const Step4Summary = () => {
                             onClick={handleInitialPaymentIntent}
                             disabled={loading}
                             className={`w-full h-[52px] text-white text-lg font-bold rounded-full transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary mb-4 ${loading
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-primary hover:bg-red-700'
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-primary hover:bg-red-700'
                                 }`}
                         >
                             {loading ? 'Generando plataforma de pago...' : `Ir a pagar`}
