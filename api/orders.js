@@ -1,24 +1,80 @@
 import Stripe from 'stripe'
 import { MongoClient } from 'mongodb'
+import { randomUUID } from 'crypto'
+import { sendConfirmationEmail } from './email.js'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+const TEST_MODE = process.env.TEST_MODE === 'true'
 
 export default async function handler(req, res) {
     if (req.method === 'POST') {
         try {
             const { contact, pickup, items, totals } = req.body
 
-            // 1. Calcular monto según mode
+            const client = new MongoClient(process.env.MONGODB_URI)
+            await client.connect()
+            const collection = client.db('ssushipedidos').collection('orders')
+
+            if (TEST_MODE) {
+                // ── MODO DE PRUEBA ────────────────────────────────────────
+                // Guarda en MongoDB con status 'paid', sin llamar a Stripe.
+                const paymentIntentId = 'test_' + Date.now()
+                const managerToken = randomUUID()
+
+                const order = {
+                    contact,
+                    pickup,
+                    items,
+                    totals,
+                    paymentIntentId,
+                    managerToken,
+                    status: 'paid',
+                    createdAt: new Date(),
+                    paidAt: new Date()
+                }
+
+                await collection.insertOne(order)
+
+                await client.close()
+
+                console.log('🧪 TEST_MODE: orden guardada en MongoDB sin Stripe', { paymentIntentId })
+
+                await notifyRestaurant({ contact, pickup, items, totals })
+                await sendConfirmationEmail({ order: { contact, pickup, items, totals }, token: managerToken })
+
+                return res.json({ clientSecret: 'test_mode', testMode: true })
+            }
+
+            // ── PRODUCCIÓN ────────────────────────────────────────────────
+            // Inicializar Stripe solo en producción (STRIPE_SECRET_KEY requerida)
+            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+
+            // 1. Calcular monto
             const settings = { payment: { mode: 'full', depositPercent: 10 } }
             const amount = settings.payment.mode === 'deposit'
                 ? Math.round(totals.total * settings.payment.depositPercent / 100 * 100)
                 : Math.round(totals.total * 100)  // Stripe usa centavos
 
-            // 2. Crear PaymentIntent en Stripe
+            // 2. Guardar en MongoDB PRIMERO como 'pending' (antes de Stripe)
+            const managerToken = randomUUID()
+            const doc = {
+                contact,
+                pickup,
+                items,
+                totals,
+                paymentIntentId: null,
+                managerToken,
+                status: 'pending',
+                createdAt: new Date(),
+                paidAt: null
+            }
+            const { insertedId } = await collection.insertOne(doc)
+
+            // 3. Crear PaymentIntent en Stripe
             const paymentIntent = await stripe.paymentIntents.create({
                 amount,
                 currency: 'mxn',
                 metadata: {
+                    orderId: insertedId.toString(),
                     customerEmail: contact.email,
                     customerName: contact.name,
                     pickupDate: pickup.date,
@@ -26,54 +82,56 @@ export default async function handler(req, res) {
                 }
             })
 
-            // 3. Guardar orden en MongoDB como 'pending'
-            const client = new MongoClient(process.env.MONGODB_URI)
-            await client.connect()
-            const db = client.db('ssushipedidos')
-            await db.collection('orders').insertOne({
-                contact,
-                pickup,
-                items,
-                totals,
-                paymentIntentId: paymentIntent.id,
-                status: 'pending',
-                createdAt: new Date()
-            })
+            // 4. Actualizar el documento con el paymentIntentId real
+            await collection.updateOne(
+                { _id: insertedId },
+                { $set: { paymentIntentId: paymentIntent.id } }
+            )
+
             await client.close()
 
             // Notificación al restaurante
             await notifyRestaurant({ contact, pickup, items, totals })
+            await sendConfirmationEmail({ order: { contact, pickup, items, totals }, token: managerToken })
 
             // Captura en Klaviyo
             await addToKlaviyo(contact)
 
-            // 4. Retornar clientSecret al frontend
-            res.json({ clientSecret: paymentIntent.client_secret })
+            // 5. Retornar clientSecret al frontend
+            return res.json({ clientSecret: paymentIntent.client_secret })
 
         } catch (err) {
             console.error(err)
             res.status(500).json({ error: err.message })
         }
     } else {
-        res.setHeader('Allow', 'POST');
-        res.status(405).end('Method Not Allowed');
+        res.setHeader('Allow', 'POST')
+        res.status(405).end('Method Not Allowed')
     }
 }
 
 async function notifyRestaurant({ contact, pickup, items, totals }) {
-    // TODO: reemplazar con SendGrid o el canal que defina Valde
-    // Opciones: SendGrid email, Slack webhook, módulo ERP
-    console.log('📧 Notificación al restaurante:', {
-        cliente: contact.name,
-        pickup: `${pickup.date} ${pickup.time}`,
-        total: totals.total,
-        items: items.map(i => `${i.qty}x ${i.name}`).join(', ')
-    })
-    // Cuando esté listo:
-    // await fetch(process.env.SLACK_WEBHOOK_URL, { 
-    //   method: 'POST', 
-    //   body: JSON.stringify({ text: `Nuevo pedido de ${contact.name}...` })
-    // })
+    const erpWebhookUrl = process.env.ERP_WEBHOOK_URL
+    const secret = process.env.SUSHI_WEBHOOK_SECRET
+
+    if (!erpWebhookUrl || !secret) {
+        console.log('⚠️ ERP_WEBHOOK_URL o SUSHI_WEBHOOK_SECRET no configurados')
+        return
+    }
+
+    try {
+        await fetch(erpWebhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-sushi-secret': secret
+            },
+            body: JSON.stringify({ contact, pickup, items, totals })
+        })
+        console.log('✅ Webhook ERP notificado')
+    } catch (err) {
+        console.error('❌ Error notificando al ERP:', err.message)
+    }
 }
 
 async function addToKlaviyo(contact) {
