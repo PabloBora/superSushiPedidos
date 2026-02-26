@@ -1,3 +1,5 @@
+import { klaviyoUpsertProfile } from './klaviyo-helper.js'
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).end()
 
@@ -27,6 +29,31 @@ export default async function handler(req, res) {
             // await sendConfirmationEmail(paymentIntent.metadata)
 
             console.log('✅ Pago confirmado:', paymentIntent.id)
+
+            // Captura en Klaviyo
+            const apiKey = process.env.KLAVIYO_PRIVATE_KEY
+            const listId = process.env.KLAVIYO_LIST_ID
+            const { customerEmail, customerName, customerPhone } = paymentIntent.metadata
+
+            if (apiKey && listId && customerEmail) {
+                const profileData = {
+                    type: 'profile',
+                    attributes: {
+                        email: customerEmail,
+                        phone_number: customerPhone || null,
+                        first_name: customerName || null,
+                        properties: {
+                            source: 'sushi-pedidos-online',
+                            has_ordered: true
+                        }
+                    }
+                }
+
+                // Disparo en background
+                klaviyoUpsertProfile(profileData, listId, apiKey)
+                    .then(() => console.log('✅ Klaviyo lead confirmado en webhook:', customerEmail))
+                    .catch(e => console.error('❌ Error Klaviyo webhook:', e.message))
+            }
         }
 
         res.json({ received: true })

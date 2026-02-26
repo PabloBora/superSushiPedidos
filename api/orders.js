@@ -2,6 +2,7 @@ import Stripe from 'stripe'
 import { MongoClient } from 'mongodb'
 import { randomUUID } from 'crypto'
 import { sendConfirmationEmail } from './email.js'
+import { klaviyoUpsertProfile } from './klaviyo-helper.js'
 
 const TEST_MODE = process.env.TEST_MODE === 'true'
 
@@ -40,6 +41,7 @@ export default async function handler(req, res) {
 
                 await notifyRestaurant({ contact, pickup, items, totals })
                 await sendConfirmationEmail({ order: { contact, pickup, items, totals }, token: managerToken })
+                await addToKlaviyo(contact)
 
                 return res.json({ clientSecret: 'test_mode', testMode: true })
             }
@@ -77,6 +79,7 @@ export default async function handler(req, res) {
                     orderId: insertedId.toString(),
                     customerEmail: contact.email,
                     customerName: contact.name,
+                    customerPhone: contact.phone || '',
                     pickupDate: pickup.date,
                     pickupTime: pickup.time
                 }
@@ -90,12 +93,14 @@ export default async function handler(req, res) {
 
             await client.close()
 
-            // Notificación al restaurante
+            // TODO PRODUCCIÓN: mover notifyRestaurant() y 
+            // sendConfirmationEmail() a api/webhook.js dentro 
+            // del handler payment_intent.succeeded para garantizar 
+            // que solo se ejecutan cuando el pago es confirmado por Stripe.
             await notifyRestaurant({ contact, pickup, items, totals })
             await sendConfirmationEmail({ order: { contact, pickup, items, totals }, token: managerToken })
 
-            // Captura en Klaviyo
-            await addToKlaviyo(contact)
+            // Captura en Klaviyo movida al webhook para producción
 
             // 5. Retornar clientSecret al frontend
             return res.json({ clientSecret: paymentIntent.client_secret })
@@ -135,28 +140,32 @@ async function notifyRestaurant({ contact, pickup, items, totals }) {
 }
 
 async function addToKlaviyo(contact) {
-    // TODO: reemplazar con llamada real a Klaviyo API
-    console.log('📬 Klaviyo lead capturado:', contact.email)
-    // Cuando esté listo:
-    // await fetch('https://a.klaviyo.com/api/profiles/', {
-    //   method: 'POST',
-    //   headers: { 
-    //     Authorization: `Klaviyo-API-Key ${process.env.KLAVIYO_API_KEY}`,
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify({
-    //     data: {
-    //       type: 'profile',
-    //       attributes: {
-    //         email: contact.email,
-    //         phone_number: contact.phone,
-    //         first_name: contact.name,
-    //         properties: { source: 'sushi-pedidos-online' }
-    //       },
-    //       relationships: {
-    //         lists: { data: [{ type: 'list', id: process.env.KLAVIYO_LIST_ID }] }
-    //       }
-    //     }
-    //   })
-    // })
+    const apiKey = process.env.KLAVIYO_PRIVATE_KEY
+    const listId = process.env.KLAVIYO_LIST_ID
+
+    if (!apiKey || !listId) {
+        console.warn('⚠️ KLAVIYO_PRIVATE_KEY o KLAVIYO_LIST_ID no configurados. Lead ignorado:', contact.email)
+        return
+    }
+
+    try {
+        const profileData = {
+            type: 'profile',
+            attributes: {
+                email: contact.email,
+                phone_number: contact.phone || null,
+                first_name: contact.name || null,
+                properties: {
+                    source: 'sushi-pedidos-online',
+                    has_ordered: true
+                }
+            }
+        }
+
+        await klaviyoUpsertProfile(profileData, listId, apiKey)
+
+        console.log('✅ Klaviyo lead capturado y agregado a la lista:', contact.email)
+    } catch (err) {
+        console.error('❌ ERROR inesperado en addToKlaviyo:', err.message)
+    }
 }

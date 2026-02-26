@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useOrder } from '../hooks/useOrder.jsx';
 import StepIndicator from '../components/StepIndicator.jsx';
@@ -6,6 +6,7 @@ import { captureAbandonedLead } from '../services/api.js';
 
 const Step1Contact = () => {
     const { contact, setContact, setStep } = useOrder();
+    const leadCapturedRef = useRef(false);
     const { register, handleSubmit, getValues, formState: { errors } } = useForm({
         defaultValues: {
             name: contact.name || '',
@@ -26,6 +27,8 @@ const Step1Contact = () => {
         const { name, phone, email } = getValues();
         if (email && !errors.email) {
             try {
+                if (leadCapturedRef.current) return;
+                leadCapturedRef.current = true;
                 // Captura silenciosa, no bloquea al usuario
                 await captureAbandonedLead({ name, phone, email });
             } catch (err) {

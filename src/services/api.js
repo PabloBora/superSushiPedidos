@@ -8,8 +8,9 @@ export const createOrder = async (orderData) => {
 }
 
 export const captureAbandonedLead = async (contact) => {
-    // Se llama cuando el usuario llena Step1 pero no completa el pedido
-    // TODO: conectar a Klaviyo directamente desde frontend
-    // Por ahora solo log
-    console.log('📬 Lead abandonado capturado:', contact.email)
+    try {
+        await axios.post(`${BASE}/api/klaviyo-lead`, contact)
+    } catch (err) {
+        console.error('Error enviando lead abandonado:', err)
+    }
 }
