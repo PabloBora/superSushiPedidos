@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useOrder } from '../hooks/useOrder.jsx';
 import { SETTINGS } from '../config/settings.js';
 import StepIndicator from '../components/StepIndicator.jsx';
@@ -8,8 +8,13 @@ const Step2Pickup = () => {
 
     // Initialize with form data or today's date if not set
     const getTodayFormatted = () => {
-        const today = new Date();
-        return today.toISOString().split('T')[0];
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Monterrey',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+        return formatter.format(new Date());
     };
 
     const getMaxDateFormatted = () => {
@@ -20,26 +25,51 @@ const Step2Pickup = () => {
 
     const [date, setDate] = useState(pickup.date || getTodayFormatted());
     const [time, setTime] = useState(pickup.time || '');
-    const [timeSlots, setTimeSlots] = useState([]);
     const [error, setError] = useState('');
 
-    // Generate time slots based on settings
-    useEffect(() => {
+    // Generate time slots based on settings and context date
+    const generateSlots = (selectedDate) => {
         const slots = [];
         const { open, close, intervalMinutes } = SETTINGS.pickupHours;
-
-        // Parse open time
         const [openHour, openMin] = open.split(':').map(Number);
-        // Parse close time
         const [closeHour, closeMin] = close.split(':').map(Number);
+
+        const isToday = selectedDate === getTodayFormatted();
+        let minAvailableHour = 0;
+        let minAvailableMinute = 0;
+
+        if (isToday) {
+            // Obtener hora actual en Monclova (America/Monterrey)
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Monterrey',
+                hour: 'numeric',
+                minute: 'numeric',
+                hourCycle: 'h23' // 0-23
+            });
+
+            // "14:30"
+            const parts = formatter.format(new Date()).split(':');
+            const currentH = parseInt(parts[0], 10);
+            const currentM = parseInt(parts[1], 10);
+
+            // Agregar 1 hora de margen (60 min)
+            const rawM = currentM + 60;
+            minAvailableHour = currentH + Math.floor(rawM / 60);
+            minAvailableMinute = rawM % 60;
+        }
 
         let currentHour = openHour;
         let currentMin = openMin;
 
         while (currentHour < closeHour || (currentHour === closeHour && currentMin <= closeMin)) {
-            const formattedHour = currentHour.toString().padStart(2, '0');
-            const formattedMin = currentMin.toString().padStart(2, '0');
-            slots.push(`${formattedHour}:${formattedMin}`);
+            // Si es hoy, validar que el slot ofertado sea mayor al mínimo disponible
+            const isValidToday = !isToday || (currentHour > minAvailableHour || (currentHour === minAvailableHour && currentMin >= minAvailableMinute));
+
+            if (isValidToday) {
+                const formattedHour = currentHour.toString().padStart(2, '0');
+                const formattedMin = currentMin.toString().padStart(2, '0');
+                slots.push(`${formattedHour}:${formattedMin}`);
+            }
 
             currentMin += intervalMinutes;
             if (currentMin >= 60) {
@@ -48,11 +78,18 @@ const Step2Pickup = () => {
             }
         }
 
-        setTimeSlots(slots);
-    }, []);
+        return slots;
+    };
+
+    const timeSlots = generateSlots(date);
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (time && !timeSlots.includes(time)) {
+            setTime('');
+            setError('El horario seleccionado ya no está disponible. Elige otro.');
+            return;
+        }
         if (!date || !time) {
             setError('Por favor selecciona una fecha y hora para recoger tu pedido');
             return;
@@ -86,6 +123,9 @@ const Step2Pickup = () => {
                         min={getTodayFormatted()}
                         max={getMaxDateFormatted()}
                         onChange={(e) => {
+                            if (time && !generateSlots(e.target.value).includes(time)) {
+                                setTime('');
+                            }
                             setDate(e.target.value);
                             setError('');
                         }}

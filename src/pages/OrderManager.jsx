@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import logoFull from '../assets/logos-03.png';
 
 const CONTACT_PHONE = import.meta.env.VITE_CONTACT_PHONE || '844-XXX-XXXX';
@@ -12,14 +12,61 @@ const STATUS_LABELS = {
     cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700' },
 };
 
-// Genera slots de 30 min entre 12:00 y 21:00
-function generateTimeSlots() {
+// Obtiene la fecha de hoy en formato YYYY-MM-DD según Monclova
+function getTodayFormatted() {
+    const formatter = new Intl.DateTimeFormat('en-CA', { // en-CA format is YYYY-MM-DD
+        timeZone: 'America/Monterrey',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+    return formatter.format(new Date());
+}
+
+// Genera slots de 30 min entre 12:00 y 21:00, filtrando por margen de 1 hora si es hoy
+function generateTimeSlots(selectedDate) {
     const slots = [];
-    for (let h = 12; h <= 20; h++) {
-        slots.push(`${String(h).padStart(2, '0')}:00`);
-        slots.push(`${String(h).padStart(2, '0')}:30`);
+
+    let minAvailableHour = 0;
+    let minAvailableMinute = 0;
+    const isToday = selectedDate === getTodayFormatted();
+
+    if (isToday) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Monterrey',
+            hour: 'numeric',
+            minute: 'numeric',
+            hourCycle: 'h23' // 0-23
+        });
+
+        const parts = formatter.format(new Date()).split(':');
+        const currentH = parseInt(parts[0], 10);
+        const currentM = parseInt(parts[1], 10);
+
+        // Agregar 1 hora de margen (60 min)
+        const rawM = currentM + 60;
+        minAvailableHour = currentH + Math.floor(rawM / 60);
+        minAvailableMinute = rawM % 60;
     }
-    slots.push('21:00');
+
+    // Intervalo fijo de las opciones harcodeadas en la versión anterior
+    // De 12:00 a 21:00
+    for (let h = 12; h <= 20; h++) {
+        const hStr = String(h).padStart(2, '0');
+
+        if (!isToday || (h > minAvailableHour || (h === minAvailableHour && 0 >= minAvailableMinute))) {
+            slots.push(`${hStr}:00`);
+        }
+
+        if (!isToday || (h > minAvailableHour || (h === minAvailableHour && 30 >= minAvailableMinute))) {
+            slots.push(`${hStr}:30`);
+        }
+    }
+
+    if (!isToday || (21 > minAvailableHour || (21 === minAvailableHour && 0 >= minAvailableMinute))) {
+        slots.push('21:00');
+    }
+
     return slots;
 }
 
@@ -55,26 +102,36 @@ export default function OrderManager() {
     const [saveSuccess, setSaveSuccess] = useState(false);
 
     useEffect(() => {
-        fetchOrder();
-    }, [token]);
+        let isCancelled = false;
 
-    async function fetchOrder() {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await fetch(`${API_BASE}/api/order-manager/${token}`);
-            if (res.status === 404) throw new Error('Pedido no encontrado. Verifica que el link sea correcto.');
-            if (!res.ok) throw new Error('Error al cargar el pedido.');
-            const data = await res.json();
-            setOrder(data);
-            setNewDate(data.pickup.date);
-            setNewTime(data.pickup.time);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
+        async function fetchOrder() {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(`${API_BASE}/api/order-manager/${token}`);
+                if (res.status === 404) throw new Error('Pedido no encontrado. Verifica que el link sea correcto.');
+                if (!res.ok) throw new Error('Error al cargar el pedido.');
+                const data = await res.json();
+                if (isCancelled) return;
+                setOrder(data);
+                setNewDate(data.pickup.date);
+                setNewTime(data.pickup.time);
+            } catch (err) {
+                if (!isCancelled) {
+                    setError(err.message);
+                }
+            } finally {
+                if (!isCancelled) {
+                    setLoading(false);
+                }
+            }
         }
-    }
+
+        fetchOrder();
+        return () => {
+            isCancelled = true;
+        };
+    }, [token]);
 
     async function handleUpdatePickup() {
         setSaving(true);
@@ -110,6 +167,15 @@ export default function OrderManager() {
         });
     }
 
+    useEffect(() => {
+        if (!order) return;
+
+        const slots = generateTimeSlots(editing ? newDate : order.pickup.date);
+        if (editing && newTime && !slots.includes(newTime) && slots.length > 0) {
+            setNewTime(slots[0]);
+        }
+    }, [editing, newDate, newTime, order]);
+
     // ── Loading ──────────────────────────────────────────────────────────────
     if (loading) {
         return (
@@ -137,8 +203,11 @@ export default function OrderManager() {
 
     const statusInfo = STATUS_LABELS[order.status] || { label: order.status, color: 'bg-gray-100 text-gray-700' };
     const dateOptions = generateDateOptions();
-    const timeSlots = generateTimeSlots();
 
+    // Regenerar opciones de horas si cambia la fecha que se está editando
+    const timeSlots = generateTimeSlots(editing ? newDate : order.pickup.date);
+
+    // Limpiar time seleccionado si de repente ya no está disponible por la regla de 1 hr
     return (
         <div className="min-h-screen bg-gray-50 pb-16">
             {/* Header */}
@@ -154,28 +223,18 @@ export default function OrderManager() {
                 {/* Success toast */}
                 <AnimatePresence>
                     {saveSuccess && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2 text-green-700 text-sm font-medium"
-                        >
+                        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2 text-green-700 text-sm font-medium">
                             ✅ Horario actualizado correctamente
-                        </motion.div>
+                        </div>
                     )}
                 </AnimatePresence>
 
                 {/* Error inline */}
                 <AnimatePresence>
                     {error && order && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm"
-                        >
+                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
                             {error}
-                        </motion.div>
+                        </div>
                     )}
                 </AnimatePresence>
 
@@ -221,11 +280,7 @@ export default function OrderManager() {
                             )}
                         </div>
                     ) : (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            className="space-y-3"
-                        >
+                        <div className="space-y-3">
                             <div>
                                 <label className="block text-xs text-gray-500 font-medium mb-1">Nueva fecha</label>
                                 <select
@@ -267,7 +322,7 @@ export default function OrderManager() {
                                     Cancelar
                                 </button>
                             </div>
-                        </motion.div>
+                        </div>
                     )}
                 </div>
 
